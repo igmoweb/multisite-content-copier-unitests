@@ -2,7 +2,7 @@
 
 require_once( 'C:\wamp\www\wpmudev2\wp-content\plugins\multisite-content-copier/multisite-content-copier.php' ); 
   
-class MCC_Copy_Page extends WP_UnitTestCase {  
+class MCC_Copy_CPT extends WP_UnitTestCase {  
 
     protected $plugin;  
     protected $orig_blog_id;  
@@ -10,7 +10,7 @@ class MCC_Copy_Page extends WP_UnitTestCase {
     protected $copier;
     protected $images_array;
     protected $base_dir;
-    protected $new_page_id;
+    protected $new_post_id;
   
     function setUp() {  
           
@@ -34,6 +34,7 @@ class MCC_Copy_Page extends WP_UnitTestCase {
         $this->dest_base_dir = $upload_dir['path'] . '/';
         restore_current_blog();
 
+
         $this->setup_initial_data();
 
     } // end setup  
@@ -41,12 +42,46 @@ class MCC_Copy_Page extends WP_UnitTestCase {
     function setup_initial_data() {
 
         switch_to_blog( $this->orig_blog_id );
+
+        $labels = array(
+            'name'               => 'Books',
+            'singular_name'      => 'Book',
+            'add_new'            => 'Add New',
+            'add_new_item'       => 'Add New Book',
+            'edit_item'          => 'Edit Book',
+            'new_item'           => 'New Book',
+            'all_items'          => 'All Books',
+            'view_item'          => 'View Book',
+            'search_items'       => 'Search Books',
+            'not_found'          => 'No books found',
+            'not_found_in_trash' => 'No books found in Trash',
+            'parent_item_colon'  => '',
+            'menu_name'          => 'Books'
+          );
+
+          $args = array(
+            'labels'             => $labels,
+            'public'             => true,
+            'publicly_queryable' => true,
+            'show_ui'            => true,
+            'show_in_menu'       => true,
+            'query_var'          => true,
+            'rewrite'            => array( 'slug' => 'book' ),
+            'capability_type'    => 'post',
+            'has_archive'        => true,
+            'hierarchical'       => false,
+            'menu_position'      => null,
+            'supports'           => array( 'title', 'editor', 'author', 'thumbnail', 'excerpt', 'comments' )
+          );        
+        register_post_type( 'book', $args );
+
+
         $post_content = 'a_content';
 
         $this->orig_parent_post_id = $this->factory->post->create_object( array(
             'post_content' => $post_content,
-            'post_type' => 'page',
-            'post_name' => 'page-parent',
+            'post_type' => 'book',
+            'post_name' => 'book-parent',
             'post_date' => '2013-09-25 00:00:00'
         ) );
 
@@ -60,11 +95,12 @@ class MCC_Copy_Page extends WP_UnitTestCase {
 
         $this->orig_post_id = $this->factory->post->create_object( array(
             'post_content' => $post_content,
-            'post_type' => 'page',
+            'post_type' => 'book',
             'post_parent' => $this->orig_parent_post_id,
-            'post_name' => 'page-child',
+            'post_name' => 'book-child',
             'post_date' => '2013-09-25 00:00:00'
         ) );
+
 
         // Copying images to the first upload folder
         $this->images_array = array(
@@ -105,7 +141,6 @@ class MCC_Copy_Page extends WP_UnitTestCase {
             if ( $image['thumbnail'] )
                 set_post_thumbnail( $this->orig_post_id, $attachment_id );
         }
-
 
         $time = current_time('mysql');
 
@@ -162,22 +197,28 @@ class MCC_Copy_Page extends WP_UnitTestCase {
         //Comment meta
         update_comment_meta( $comment_id, 'a_meta_key', 'meta_value' );
 
+        
+        restore_current_blog();
+
+        switch_to_blog( $this->dest_blog_id );
+        // Adding a repeated category
+        $term = wp_insert_term( 'Another category', 'category' );
         restore_current_blog();
     }
 
     function tearDown() {
-        $files = glob( $this->base_dir . '/*');
-        foreach ( $files as $image ) {
-            unlink( $image );
-        }
+       $files = glob( $this->base_dir . '/*');
+       foreach ( $files as $image ) {
+           unlink( $image );
+       }
 
-        $files = glob( $this->dest_base_dir . '/*');
-        foreach ( $files as $image ) {
-            unlink( $image );
-        }
+       $files = glob( $this->dest_base_dir . '/*');
+       foreach ( $files as $image ) {
+           unlink( $image );
+       }
     }
 
-    function test_copy_page() {
+    function test_copy_post() {
         switch_to_blog( $this->dest_blog_id );
         $args = array(
             'copy_images' => false,
@@ -188,22 +229,22 @@ class MCC_Copy_Page extends WP_UnitTestCase {
             'copy_comments' => false
         );
 
-        $copier = new Multisite_Content_Copier_Page_Copier( $this->orig_blog_id, $args );
+        $copier = new Multisite_Content_Copier_CPT_Copier( $this->orig_blog_id, $args );
         restore_current_blog();
 
         switch_to_blog( $this->dest_blog_id );
         $results = $copier->copy( $this->orig_post_id );
-        
+
         $this->assertTrue( is_integer( $results['new_post_id'] ) && $results['new_post_id'] > 0 );
         $this->assertFalse( $results['new_parent_post_id'] );
 
-        $new_page = get_post( $results['new_post_id'] );
-        $this->assertEquals( $new_page->post_name, 'page-child' );
+        $new_post = get_post( $results['new_post_id'] );
+        $this->assertEquals( $new_post->post_name, 'book-child' );
 
         restore_current_blog();
     }
 
-    function test_copy_page_and_parent() {
+    function test_copy_post_and_parent() {
 
         switch_to_blog( $this->dest_blog_id );
         $args = array(
@@ -215,26 +256,26 @@ class MCC_Copy_Page extends WP_UnitTestCase {
             'copy_comments' => false
         );
 
-        $copier = new Multisite_Content_Copier_Page_Copier( $this->orig_blog_id, $args );
+        $copier = new Multisite_Content_Copier_Post_Copier( $this->orig_blog_id, $args );
         restore_current_blog();
 
         switch_to_blog( $this->dest_blog_id );
         $results = $copier->copy( $this->orig_post_id );
         
-        $new_parent_page_id = $results['new_parent_post_id'];
-        $this->assertTrue( is_integer( $new_parent_page_id ) && $new_parent_page_id > 0 );
+        $new_parent_post_id = $results['new_parent_post_id'];
+        $this->assertTrue( is_integer( $new_parent_post_id ) && $new_parent_post_id > 0 );
 
-        $new_parent_page = get_post( $new_parent_page_id );
-        $this->assertEquals( $new_parent_page->post_name, 'page-parent' );
+        $new_parent_post = get_post( $new_parent_post_id );
+        $this->assertEquals( $new_parent_post->post_name, 'book-parent' );
 
-        $new_page = get_post( $results['new_post_id'] );
-        $this->assertEquals( $new_page->post_parent, $new_parent_page_id );
+        $new_post = get_post( $results['new_post_id'] );
+        $this->assertEquals( $new_post->post_parent, $new_parent_post_id );
         restore_current_blog();
         
         
     }
 
-    function test_copy_page_update_date() {
+    function test_copy_post_update_date() {
 
         switch_to_blog( $this->dest_blog_id );
         $args = array(
@@ -246,19 +287,19 @@ class MCC_Copy_Page extends WP_UnitTestCase {
             'copy_comments' => false
         );
 
-        $copier = new Multisite_Content_Copier_Page_Copier( $this->orig_blog_id, $args );
+        $copier = new Multisite_Content_Copier_Post_Copier( $this->orig_blog_id, $args );
 
         $orig_post = get_blog_post( $this->orig_blog_id, $this->orig_post_id );
 
         $results = $copier->copy( $this->orig_post_id );
 
-        $new_page = get_post( $results['new_post_id'] );
-        $this->assertGreaterThan( $orig_post->post_date, $new_page->post_date );
+        $new_post = get_post( $results['new_post_id'] );
+        $this->assertGreaterThan( $orig_post->post_date, $new_post->post_date );
         restore_current_blog();
         
     }
 
-    function test_copy_page_and_comments() {
+    function test_copy_post_and_comments() {
 
         switch_to_blog( $this->orig_blog_id );
         $orig_comments_no = count( get_comments( array( 'post_id' => $this->orig_post_id ) ) );
@@ -274,7 +315,7 @@ class MCC_Copy_Page extends WP_UnitTestCase {
             'copy_comments' => true
         );
 
-        $copier = new Multisite_Content_Copier_Page_Copier( $this->orig_blog_id, $args );
+        $copier = new Multisite_Content_Copier_Post_Copier( $this->orig_blog_id, $args );
 
         $orig_post = get_blog_post( $this->orig_blog_id, $this->orig_post_id );
 
@@ -305,7 +346,7 @@ class MCC_Copy_Page extends WP_UnitTestCase {
             'copy_comments' => false
         );
 
-        $copier = new Multisite_Content_Copier_Page_Copier( $this->orig_blog_id, $args );
+        $copier = new Multisite_Content_Copier_Post_Copier( $this->orig_blog_id, $args );
         $images = $copier->get_all_media_in_post( $this->orig_post_id );
 
         $attachments = array();
@@ -340,7 +381,7 @@ class MCC_Copy_Page extends WP_UnitTestCase {
         return glob( $this->base_dir . '/' . $filename . '*' );
     }
 
-    function test_copy_page_and_media() {
+    function test_copy_post_and_media() {
         switch_to_blog( $this->dest_blog_id );
 
         $args = array(
@@ -352,91 +393,51 @@ class MCC_Copy_Page extends WP_UnitTestCase {
             'copy_comments' => false
         );
 
-        $copier = new Multisite_Content_Copier_Page_Copier( $this->orig_blog_id, $args );
+        $copier = new Multisite_Content_Copier_Post_Copier( $this->orig_blog_id, $args );
 
-        $new_page_id = $copier->copy_post( $this->orig_post_id );
+        $new_post_id = $copier->copy_post( $this->orig_post_id );
 
-        $page = get_post( $new_page_id );
-        // Page created ??
-        $this->assertTrue( ! empty( $page ) );
+        $post = get_post( $new_post_id );
+        // Post created ??
+        $this->assertTrue( ! empty( $post ) );
 
-        $copier->copy_media( $this->orig_post_id, $new_page_id );
+        $copier->copy_media( $this->orig_post_id, $new_post_id );
 
-        $orig_page = get_blog_post( $this->orig_blog_id, $this->orig_post_id );
-        $orig_author = $orig_page->post_author;
-        $orig_date = $orig_page->post_date;
+        $orig_post = get_blog_post( $this->orig_blog_id, $this->orig_post_id );
+        $orig_author = $orig_post->post_author;
+        $orig_date = $orig_post->post_date;
 
-        $page = get_post( $new_page_id );
+        $post = get_post( $new_post_id );
 
         $this->assertContains( 
             '<a href="http://localhost/phpunit-wp/wp-content/uploads/' . $this->dest_upload_subfolder . 'solo-cabeza2.png"><img class="alignnone size-full wp-image-274" alt="solo-cabeza" src="http://localhost/phpunit-wp/wp-content/uploads/' . $this->dest_upload_subfolder . 'solo-cabeza2.png" width="1555" height="767" />', 
-            $page->post_content
+            $post->post_content
         );
 
         $this->assertContains( 
             '<a href="http://localhost/phpunit-wp/wp-content/uploads/' . $this->dest_upload_subfolder . 'IMG_2301-768x1024.jpg"><img class="alignnone size-thumbnail wp-image-275" alt="IMG_2301-768x1024" src="http://localhost/phpunit-wp/wp-content/uploads/' . $this->dest_upload_subfolder . 'IMG_2301-768x1024-150x150.jpg" width="150" height="150" /></a>', 
-            $page->post_content
+            $post->post_content
         );
 
         $this->assertContains( 
             '<a href="http://localhost/phpunit-wp/wp-content/uploads/' . $this->dest_upload_subfolder . 'fondos-paisajes-1024-7.jpg"><img class="alignnone size-medium wp-image-271" alt="fondos-paisajes-1024 (7)" src="http://localhost/phpunit-wp/wp-content/uploads/' . $this->dest_upload_subfolder . 'fondos-paisajes-1024-7-300x158.jpg" width="300" height="158" /></a>', 
-            $page->post_content
+            $post->post_content
         );
 
         $this->assertContains( 
             '<img class="alignnone" alt="" src="http://localhost/wpmudev2/wp-content/uploads/2013/08/uptown-laneway01-150x150.jpg" width="150" height="150" />', 
-            $page->post_content
+            $post->post_content
         );
 
-        $page_thumbnail = get_the_post_thumbnail( $new_page_id );
+        $post_thumbnail = get_the_post_thumbnail( $new_post_id );
 
-        $this->assertContains( 'http://localhost/phpunit-wp/wp-content/uploads/' . $this->dest_upload_subfolder . 'thumbnail', $page_thumbnail );
+        $this->assertContains( 'http://localhost/phpunit-wp/wp-content/uploads/' . $this->dest_upload_subfolder . 'thumbnail', $post_thumbnail );
 
-        $this->assertTrue( $page->post_author == $orig_page->post_author );
-        $this->assertTrue( $page->post_date == $orig_page->post_date );
+        $this->assertTrue( $post->post_author == $orig_post->post_author );
+        $this->assertTrue( $post->post_date == $orig_post->post_date );
         
         restore_current_blog();
-    }
-
-    function test_copy_page_with_no_images() {
-        $content = "Hey, this is ablog without images";
-
-        switch_to_blog( $this->orig_blog_id );
-        $orig_post_id = $this->factory->post->create_object( array(
-            'post_content' => $content,
-            'post_type' => 'page',
-            'post_name' => 'page-without-images',
-            'post_date' => '2013-09-25 00:00:00'
-        ) );
-        restore_current_blog();
-
-        $args = array(
-            'copy_images' => true,
-            'post_ids' => array( $orig_post_id ),
-            'keep_user' => true,
-            'update_date' => true,
-            'copy_parents' => true,
-            'copy_comments' => true
-        );
-
-        switch_to_blog( $this->dest_blog_id );
-
-        $copier = new Multisite_Content_Copier_Page_Copier( $this->orig_blog_id, $args );
-        $results = $copier->copy( $orig_post_id );
-
-        $this->assertFalse( $results['new_parent_post_id'] );
-        $this->assertTrue( is_integer( $results['new_post_id'] ) );
-
-        $post = get_post( $results['new_post_id'] );
-        $this->assertEquals( $post->post_content, $content );
-
-        $this->assertGreaterThan( '2013-09-25 00:00:00', $post->post_date );
-
-        restore_current_blog();
-
-    }
-
-    
+    }  
 
     
 
