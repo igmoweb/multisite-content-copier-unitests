@@ -8,7 +8,8 @@ class MCC_Activate_Plugins extends WP_UnitTestCase {
         parent::setUp(); 
 
         global $multisite_content_copier_plugin;
-        $this->plugin = $multisite_content_copier_plugin; 
+        $this->plugin = $multisite_content_copier_plugin;
+        $this->plugin->include_copier_classes(); 
 
         $this->dest_blog_id = 2;
 

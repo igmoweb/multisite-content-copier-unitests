@@ -9,6 +9,7 @@ class MCC_Copy_Users extends WP_UnitTestCase {
 
         global $multisite_content_copier_plugin;
         $this->plugin = $multisite_content_copier_plugin; 
+        $this->plugin->include_copier_classes();
 
         $this->orig_blog_id = 1;
         $this->dest_blog_id = 2;

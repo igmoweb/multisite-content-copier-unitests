@@ -18,6 +18,7 @@ class MCC_Copy_CPT extends WP_UnitTestCase {
 
         global $multisite_content_copier_plugin;
         $this->plugin = $multisite_content_copier_plugin; 
+        $this->plugin->include_copier_classes();
 
         $this->orig_blog_id = 2;
         $this->dest_blog_id = 3;
@@ -256,7 +257,7 @@ class MCC_Copy_CPT extends WP_UnitTestCase {
             'copy_comments' => false
         );
 
-        $copier = new Multisite_Content_Copier_Post_Copier( $this->orig_blog_id, $args );
+        $copier = new Multisite_Content_Copier_CPT_Copier( $this->orig_blog_id, $args );
         restore_current_blog();
 
         switch_to_blog( $this->dest_blog_id );
@@ -287,7 +288,7 @@ class MCC_Copy_CPT extends WP_UnitTestCase {
             'copy_comments' => false
         );
 
-        $copier = new Multisite_Content_Copier_Post_Copier( $this->orig_blog_id, $args );
+        $copier = new Multisite_Content_Copier_CPT_Copier( $this->orig_blog_id, $args );
 
         $orig_post = get_blog_post( $this->orig_blog_id, $this->orig_post_id );
 
@@ -315,7 +316,7 @@ class MCC_Copy_CPT extends WP_UnitTestCase {
             'copy_comments' => true
         );
 
-        $copier = new Multisite_Content_Copier_Post_Copier( $this->orig_blog_id, $args );
+        $copier = new Multisite_Content_Copier_CPT_Copier( $this->orig_blog_id, $args );
 
         $orig_post = get_blog_post( $this->orig_blog_id, $this->orig_post_id );
 
@@ -346,7 +347,7 @@ class MCC_Copy_CPT extends WP_UnitTestCase {
             'copy_comments' => false
         );
 
-        $copier = new Multisite_Content_Copier_Post_Copier( $this->orig_blog_id, $args );
+        $copier = new Multisite_Content_Copier_CPT_Copier( $this->orig_blog_id, $args );
         $images = $copier->get_all_media_in_post( $this->orig_post_id );
 
         $attachments = array();
@@ -393,7 +394,7 @@ class MCC_Copy_CPT extends WP_UnitTestCase {
             'copy_comments' => false
         );
 
-        $copier = new Multisite_Content_Copier_Post_Copier( $this->orig_blog_id, $args );
+        $copier = new Multisite_Content_Copier_CPT_Copier( $this->orig_blog_id, $args );
 
         $new_post_id = $copier->copy_post( $this->orig_post_id );
 
@@ -438,6 +439,42 @@ class MCC_Copy_CPT extends WP_UnitTestCase {
         
         restore_current_blog();
     }  
+
+    function test_copy_meta() {
+        switch_to_blog( $this->orig_blog_id );
+        $meta_value_array = array(
+            'this'  => 'is',
+            'an'    => 'array'
+        );
+        update_post_meta( $this->orig_post_id, 'meta_array', $meta_value_array );
+
+        $meta_value_string = 'this is an array';
+        update_post_meta( $this->orig_post_id, 'meta_string', $meta_value_string );
+        restore_current_blog();
+
+        switch_to_blog( $this->dest_blog_id );
+
+        $args = array(
+            'copy_images' => false,
+            'post_ids' => array( $this->orig_post_id ),
+            'keep_user' => false,
+            'update_date' => false,
+            'copy_parents' => false,
+            'copy_comments' => false
+        );
+
+        $copier = new Multisite_Content_Copier_CPT_Copier( $this->orig_blog_id, $args );
+
+        $new_post_id = $copier->copy_post( $this->orig_post_id );
+
+        $meta = get_post_meta( $new_post_id, 'meta_array', true );
+        $this->assertEquals( $meta_value_array, $meta );
+
+        $meta = get_post_meta( $new_post_id, 'meta_string', true );
+        $this->assertEquals( $meta_value_string, $meta );
+        
+        restore_current_blog();
+    }
 
     
 

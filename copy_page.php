@@ -18,6 +18,7 @@ class MCC_Copy_Page extends WP_UnitTestCase {
 
         global $multisite_content_copier_plugin;
         $this->plugin = $multisite_content_copier_plugin; 
+        $this->plugin->include_copier_classes();
 
         $this->orig_blog_id = 2;
         $this->dest_blog_id = 3;
@@ -335,11 +336,11 @@ class MCC_Copy_Page extends WP_UnitTestCase {
         restore_current_blog();
 
     }
-
+    
     function file_exists( $filename ) {
         return glob( $this->base_dir . '/' . $filename . '*' );
     }
-
+    
     function test_copy_page_and_media() {
         switch_to_blog( $this->dest_blog_id );
 
@@ -434,6 +435,74 @@ class MCC_Copy_Page extends WP_UnitTestCase {
 
         restore_current_blog();
 
+    }
+
+    function test_copy_meta() {
+        switch_to_blog( $this->orig_blog_id );
+        $meta_value_array = array(
+            'this'  => 'is',
+            'an'    => 'array'
+        );
+        update_post_meta( $this->orig_post_id, 'meta_array', $meta_value_array );
+        $meta_value_string = 'this is an array';
+        update_post_meta( $this->orig_post_id, 'meta_string', $meta_value_string );
+        restore_current_blog();
+
+        switch_to_blog( $this->dest_blog_id );
+
+        $args = array(
+            'copy_images' => false,
+            'post_ids' => array( $this->orig_post_id ),
+            'keep_user' => false,
+            'update_date' => false,
+            'copy_parents' => false,
+            'copy_comments' => false
+        );
+
+        $copier = new Multisite_Content_Copier_Page_Copier( $this->orig_blog_id, $args );
+
+        $new_post_id = $copier->copy_post( $this->orig_post_id );
+
+        $meta = get_post_meta( $new_post_id, 'meta_array', true );
+        $this->assertEquals( $meta_value_array, $meta );
+
+        $meta = get_post_meta( $new_post_id, 'meta_string', true );
+        $this->assertEquals( $meta_value_string, $meta );
+        
+        restore_current_blog();
+    }
+
+    function test_try_to_copy_images_from_a_post_without_images() {
+        switch_to_blog( $this->orig_blog_id );
+        $post_content = 'a_content';
+
+        $test_post_id = $this->factory->post->create_object( array(
+            'post_content' => $post_content,
+            'post_type' => 'page',
+            'post_name' => 'test-page',
+            'post_date' => '2013-09-25 00:00:00'
+        ) );
+
+        restore_current_blog();
+
+        switch_to_blog( $this->dest_blog_id );
+        $args = array(
+            'copy_images' => true,
+            'post_ids' => array( $test_post_id ),
+            'keep_user' => false,
+            'update_date' => false,
+            'copy_parents' => false,
+            'copy_comments' => false
+        );
+
+        $copier = new Multisite_Content_Copier_Page_Copier( $this->orig_blog_id, $args );
+
+        $images = $copier->get_all_media_in_post( $test_post_id );
+
+        // Images should be zero!!
+        $this->assertTrue( count($images['attachments']) == 0 );
+        $this->assertTrue( count($images['no_attachments']) == 0 );
+        restore_current_blog();
     }
 
     
