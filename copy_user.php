@@ -1,9 +1,9 @@
 <?php
 
-require_once( 'C:\wamp\www\wpmudev2\wp-content\plugins\multisite-content-copier/multisite-content-copier.php' ); 
+require_once( '/vagrant/www/wordpress-wpmudev/wp-content/plugins/multisite-content-copier/multisite-content-copier.php' ); 
   
 class MCC_Copy_Users extends WP_UnitTestCase {  
-	function setUp() {  
+    function setUp() {  
           
         parent::setUp(); 
 
@@ -24,8 +24,8 @@ class MCC_Copy_Users extends WP_UnitTestCase {
     } // end setup  
 
     function setup_initial_data() {
-    	include_once( ABSPATH . 'wp-admin/includes/plugin.php' );
-    	switch_to_blog( $this->orig_blog_id );
+        include_once( ABSPATH . 'wp-admin/includes/plugin.php' );
+        switch_to_blog( $this->orig_blog_id );
         $random_password = wp_generate_password( $length=12, $include_standard_special_chars=false );
 
         $user_id = wp_create_user( 'user1', $random_password, 'user1@gmail.com' );
@@ -43,11 +43,12 @@ class MCC_Copy_Users extends WP_UnitTestCase {
         $this->users[ $user_id ] = 'author';
         $this->users_ids[] = $user_id;
 
-    	restore_current_blog();
+        restore_current_blog();
     }
 
     function tearDown() {
-    	include_once( ABSPATH . 'wp-admin/includes/user.php' );
+        parent::tearDown();
+        include_once( ABSPATH . 'wp-admin/includes/user.php' );
 
         foreach ( $this->users as $user_id => $role ) {
             wp_delete_user( $user_id );  
@@ -63,10 +64,8 @@ class MCC_Copy_Users extends WP_UnitTestCase {
         $users_to_copy = array( $this->users_ids[0], $this->users_ids[1] );
 
         switch_to_blog( $this->dest_blog_id );
-        $args = array(
-            'users' => $users_to_copy
-        );
-        $copier = new Multisite_Content_Copier_User_Copier( $this->orig_blog_id, $args );
+
+        $copier = Multisite_Content_Copier_Factory::get_copier( 'user', $this->orig_blog_id, $users_to_copy );
         $copier->execute();
 
         $current_users = get_users();
@@ -92,10 +91,10 @@ class MCC_Copy_Users extends WP_UnitTestCase {
         // Instead of administrator we'll add it as a subscriber
         $already_existent_user = add_user_to_blog( get_current_blog_id(), $this->users_ids[0], 'subscriber' );
 
-        $args = array(
+        $users_to_copy = array(
             'users' => $this->users_ids[0]
         );
-        $copier = new Multisite_Content_Copier_User_Copier( $this->orig_blog_id, $args );
+        $copier = Multisite_Content_Copier_Factory::get_copier( 'user', $this->orig_blog_id, $users_to_copy );
         $copier->execute();
 
         // The user must exists but he should have subscriber role
@@ -106,27 +105,48 @@ class MCC_Copy_Users extends WP_UnitTestCase {
         restore_current_blog();
     }
 
-    function test_copy_all_users() {
-        switch_to_blog( $this->dest_blog_id );
+    /**
+     * Copy a user from a blog that has assigned a role 
+     * that does not exist in the destination blog
+     * @return type
+     */
+    function test_copy_user_with_no_existant_role() {
+        global $wp_roles;
+        switch_to_blog( $this->orig_blog_id );
 
-        $args = array(
-            'users' => 'all'
+        $result = add_role(
+            'orig_blog_test_role',
+            __( 'Orig Blog Test Role' ),
+            array(
+                'read'         => true,
+                'edit_posts'   => true,
+                'delete_posts' => false,
+            )
         );
-        $copier = new Multisite_Content_Copier_User_Copier( $this->orig_blog_id, $args );
+        $random_password = wp_generate_password( $length=12, $include_standard_special_chars=false );
+        $custom_role_user_id = wp_create_user( 'custom_role_user', $random_password, 'custom_role_user_id@gmail.com' );
+        add_user_to_blog( get_current_blog_id(), $custom_role_user_id, 'orig_blog_test_role' );
+        restore_current_blog();
+
+        switch_to_blog( $this->dest_blog_id );
+        $users_to_copy = array(
+            'users' => array( $custom_role_user_id )
+        );
+        $args = array(
+            'default_role' => 'administrator'
+        );
+        $copier = Multisite_Content_Copier_Factory::get_copier( 'user', $this->orig_blog_id, $users_to_copy, $args );
         $copier->execute();
 
-        $current_users = get_users();
-        $users_roles = array();
-        foreach ( $current_users as $user ) {
-            $users_roles[ $user->data->ID ] = $user->roles[0];
-        }
+        $copied_user = get_user_by( 'id', $custom_role_user_id );
+        $copied_user_role = $copied_user->roles[0];
 
-        foreach ( $this->users_ids as $user_id ) {
-            $role = $this->users[ $user_id ];
-            $this->assertTrue( array_key_exists( $user_id, $users_roles ), "Failed: user_id $user_id does not exist as a key in user_roles" );
-            $this->assertTrue( $users_roles[ $user_id ] == $role, "Failed: user_id $user_id ( " . get_userdata( $user_id )->data->user_email . " ) has not the role $role" );
-        }
+        $this->assertEquals( 'administrator', $copied_user_role );
 
+        restore_current_blog();
+
+        switch_to_blog( $this->orig_blog_id );
+        wp_delete_user( $custom_role_user_id ); 
         restore_current_blog();
     }
 }
